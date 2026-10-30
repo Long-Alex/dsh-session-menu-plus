@@ -15,7 +15,8 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const {
-      Button, IconDownloadOutlineRegular, IconTrashOutlineRegular, MenuItemButton, Modal, StateDot, Toast,
+      Button, IconCheckCircleFillRegular, IconCheckCircleOutlineRegular, IconDownloadOutlineRegular,
+      IconTrashOutlineRegular, MenuItemButton, Modal, StateDot, Toast,
     } = require('@deepseek-ai/dsh-client-ui-primitives')
 
     /** Dictionary namespace owned by this plugin. */
@@ -236,7 +237,10 @@ window.__ModuleLoader__.load({
       const marked = useUnread()
       const isUnread = marked.has(sessionId)
       return React.createElement(MenuItemButton, {
-        icon: React.createElement(StateDot, { state: isUnread ? 'done' : 'idle', size: 14 }),
+        icon: React.createElement(
+          isUnread ? IconCheckCircleOutlineRegular : IconCheckCircleFillRegular,
+          { size: 14 },
+        ),
         onSelect: () => {
           setMenuOpen(false)
           const next = new Set(unread)
