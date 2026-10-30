@@ -55,10 +55,10 @@ window.__ModuleLoader__.load({
       'toast.running': 'That session is running. Delete it once it settles',
     }
 
-    /** Row styling the shared primitives do not carry: the destructive confirm's danger skin and its pending line. */
+    /** Row styling the shared primitives do not carry: the destructive confirm label and its pending line,
+     * matching the workspace delete dialog this one mirrors. */
     const styles = `
-.smp-danger:not(:disabled){border-color:var(--dsw-alias-state-error-primary);color:var(--dsw-alias-state-error-primary)}
-.smp-danger:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-danger)}
+.smp-danger:not(:disabled){color:var(--dsw-alias-state-error-primary)}
 .smp-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
 `
 
