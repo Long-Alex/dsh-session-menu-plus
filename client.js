@@ -15,8 +15,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const {
-      Button, IconCheckCircleFillRegular, IconCheckCircleOutlineRegular, IconDownloadOutlineRegular,
-      IconTrashOutlineRegular, MenuItemButton, Modal, Toast,
+      Button, IconDownloadOutlineRegular, IconTrashOutlineRegular, MenuItemButton, Modal, StateDot, Toast,
     } = require('@deepseek-ai/dsh-client-ui-primitives')
 
     /** Dictionary namespace owned by this plugin. */
@@ -72,7 +71,6 @@ window.__ModuleLoader__.load({
 .smp-danger:not(:disabled){color:var(--dsw-alias-state-error-primary)}
 .smp-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
 .smp-unread{display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px;flex:none}
-.smp-unread::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-business-primary)}
 `
 
     /** The one confirmation awaiting an answer, and the one notice on screen. */
@@ -226,7 +224,7 @@ window.__ModuleLoader__.load({
         className: 'smp-unread',
         role: 'img',
         'aria-label': t('unread.mark'),
-      })
+      }, React.createElement(StateDot, { state: 'done' }))
     }
 
     /**
@@ -238,10 +236,7 @@ window.__ModuleLoader__.load({
       const marked = useUnread()
       const isUnread = marked.has(sessionId)
       return React.createElement(MenuItemButton, {
-        icon: React.createElement(
-          isUnread ? IconCheckCircleOutlineRegular : IconCheckCircleFillRegular,
-          { size: 14 },
-        ),
+        icon: React.createElement(StateDot, { state: isUnread ? 'done' : 'idle', size: 14 }),
         onSelect: () => {
           setMenuOpen(false)
           const next = new Set(unread)
@@ -405,7 +400,7 @@ window.__ModuleLoader__.load({
       ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
         name: 'sidebar.workspaces.session.menu.item',
         id: 'session-menu-plus.unread',
-        order: 440,
+        order: 50,
         locale: NS,
       }, MarkUnreadMenuItem))
 

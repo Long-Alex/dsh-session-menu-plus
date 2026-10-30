@@ -5,7 +5,7 @@ Three additions to the DeepSeek Harness sidebar Session list: **a Session menu o
 ## What it does
 
 - Right-click any Session row in the sidebar and that row's own "⋯" menu opens — no more aiming for the icon.
-- `Mark as unread` / `Mark as read` flips a mark for that Session: unread rows carry a dot in the row's leading status cell, the way DSH marks its own row states.
+- `Mark as unread` / `Mark as read` (first row in the menu) flips a mark for that Session: unread rows carry the same green `done` state dot DSH uses for its own row states, in the row's leading status cell.
 - The menu gains `Export as Markdown` (download icon, right after `Copy Session ID`) and `Delete session` (danger colour, trash icon, with a separator above it).
 - `Export as Markdown` downloads `session-<uuid>.md` and reports `Session exported`.
 - `Delete session` asks first: `Delete this session?`, the Session title, and `Cancel` / `Delete session`.
@@ -41,7 +41,7 @@ Preconditions:
 
 - **The export row (Client)**: a plain built-in `MenuItemButton` that closes the menu and requests the export. No submenu: the Session menu opens with `closeOnPointerLeave`, so a card floating beside it takes the parent away as soon as the pointer moves in, and an absolutely positioned card inside the menu gets clipped by the menu surface.
 - **The delete row (Client)**: `sidebar.workspaces.session.menu.item` injects a `MenuItemButton` (danger colour, trash icon, separator). Selecting it opens a `Modal`; confirming sends `POST /session-menu-plus/delete`; both outcomes use the shared `Toast`. No bespoke dialog, no edited built-in components.
-- **The unread mark (Client)**: two seats, no new widgets. The toggle is a `MenuItemButton` in the menu list; the dot is one component in `sidebar.session.row.leading` — the 16px cell DSH already gives its own row-state marks (the schedule plugin's clock mark sits there too). The cell only offers itself while the row's primary state is idle, so the dot never competes with a running or pending indicator. Marks live in `localStorage` under `dsh-session-menu-plus:unread` and follow the `storage` event, so two windows agree; nothing is written to the Host.
+- **The unread mark (Client)**: two seats, no new widgets. The toggle is a `MenuItemButton` in the menu list; the dot is one component in `sidebar.session.row.leading` — the 16px cell DSH already gives its own row-state marks (the schedule plugin's clock mark sits there too) — and it *is* the shared `StateDot` primitive at `state="done"`, so colour and geometry are the platform's, not ours. The cell only offers itself while the row's primary state is idle, so the dot never competes with a running or pending indicator. Marks live in `localStorage` under `dsh-session-menu-plus:unread` and follow the `storage` event, so two windows agree; nothing is written to the Host.
 - **Right-click**: the `contextmenu` gesture is forwarded to that row's own "⋯" trigger, so the menu, focus handling, outside dismissal and shortcuts stay the built-in ones.
 - **Host — the delete sequence, entirely through Host services, never by scanning directories**:
   1. Refuse only when `agents.get(id).status === 'running'`.
