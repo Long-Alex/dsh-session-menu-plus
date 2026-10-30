@@ -345,7 +345,7 @@ window.__ModuleLoader__.load({
       })
     }
 
-    const inject = ['slots', 'locale']
+    const inject = ['slots', 'locale', 'sessions']
 
     /** @param ctx - Client context owning slots, locale, and the browser document. */
     function apply(ctx) {
@@ -388,6 +388,23 @@ window.__ModuleLoader__.load({
         ctx.slots.register({ name: 'shell.overlay', id: 'session-menu-plus-dialog', order: 100, locale: NS }, DeleteSessionDialog),
         ctx.slots.register({ name: 'shell.overlay', id: 'session-menu-plus-notice', order: 110 }, SessionMenuNotice),
       ])
+
+      // Opening a Session is reading it: the row that the main view holds keeps
+      // no unread mark, so the manual toggle never has to be undone by hand.
+      ctx.effect(() => {
+        const clearOpen = () => {
+          const open = Object.values(ctx.sessions.list.getSnapshot().byId)
+            .filter(row => (row.retainedBy.mainView ?? 0) > 0)
+          if (open.length === 0) return
+          const next = new Set(unread)
+          let changed = false
+          for (const row of open) if (next.delete(row.id)) changed = true
+          if (changed) writeUnread(next)
+        }
+        const stop = ctx.sessions.list.subscribe(clearOpen)
+        clearOpen()
+        return stop
+      }, 'session-menu-plus: opening a Session clears its mark')
 
       ctx.slots.inject('sidebar.session.row.leading', () => ctx.slots.register({
         name: 'sidebar.session.row.leading',
