@@ -15,7 +15,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const {
-      Button, IconDownloadOutlineRegular, IconTrashOutlineRegular, MenuItemButton, Modal, Toast,
+      Button, IconDownloadOutlineRegular, IconTrashOutlineRegular, Menu, MenuItemButton, Modal, Toast,
     } = require('@deepseek-ai/dsh-client-ui-primitives')
 
     /** Dictionary namespace owned by this plugin. */
@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
 
     /** Simplified Chinese dictionary. */
     const zh = {
+      'menu.export': '导出',
       'menu.exportJson': '导出为 JSON',
       'menu.exportMarkdown': '导出为 Markdown',
       'menu.deleteSession': '删除会话',
@@ -40,6 +41,7 @@ window.__ModuleLoader__.load({
 
     /** English dictionary. */
     const en = {
+      'menu.export': 'Export',
       'menu.exportJson': 'Export as JSON',
       'menu.exportMarkdown': 'Export as Markdown',
       'menu.deleteSession': 'Delete session',
@@ -61,8 +63,9 @@ window.__ModuleLoader__.load({
 .smp-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
 `
 
-    /** The one confirmation awaiting an answer, and the one notice on screen. */
+    /** The one confirmation awaiting an answer, the open Export submenu, and the notice on screen. */
     let pending = null
+    let submenu = null
     let notice = null
     let sequence = 0
     const listeners = new Set()
@@ -79,6 +82,7 @@ window.__ModuleLoader__.load({
     }
 
     const usePending = () => React.useSyncExternalStore(subscribe, () => pending)
+    const useSubmenu = () => React.useSyncExternalStore(subscribe, () => submenu)
     const useNotice = () => React.useSyncExternalStore(subscribe, () => notice)
 
     /** Show one notice; a new key restarts the banner. */
@@ -141,36 +145,87 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * One download row: asks the Host for `format` and saves what comes back.
-     * @param props - slot owner props plus the row's own `format` and label key.
+     * Ask the Host for one export and save it, reporting through the notice seat.
+     * @param sessionId - Session to export.
+     * @param format - `markdown` or `json`.
+     * @param t - localized lookup for this plugin's namespace.
      */
-    function ExportMenuItem({ sessionId, useMenuOpenState, format, labelKey, t }) {
-      const [, setMenuOpen] = useMenuOpenState()
+    function exportNow(sessionId, format, t) {
+      void requestExport(sessionId, format).then((result) => {
+        if (result.ok) {
+          saveText(result.content, result.filename, result.mediaType)
+          notify(t('toast.exported'), true)
+          return
+        }
+        notify(t(result.code === 'missing' ? 'toast.missing' : 'toast.exportFailed'), false)
+      })
+    }
+
+    /**
+     * Remember where a menu row sits so a nested menu can open under it.
+     * @param event - one pointer gesture inside the popup.
+     */
+    function rememberRow(event) {
+      const row = event.target instanceof Element ? event.target.closest('[role="menuitem"]') : null
+      if (row === null) return
+      submenuRect = row.getBoundingClientRect()
+    }
+
+    /** The row that raised the submenu currently opening, and that row's box. */
+    let submenuRect = null
+
+    /**
+     * Parent row (order 460): opens the two-format submenu below itself. The
+     * nested popup is the shared `Menu`, so its styling and keyboard walk match.
+     * @param props - slot owner props.
+     */
+    function ExportMenuItem({ sessionId, useMenuOpenState, t }) {
+      const [menuOpen] = useMenuOpenState()
+      // The submenu lives under this row and dies with the menu that owns it.
+      React.useEffect(() => {
+        if (menuOpen === false && submenu !== null) {
+          submenu = null
+          publish()
+        }
+      }, [menuOpen])
       return React.createElement(MenuItemButton, {
         icon: React.createElement(IconDownloadOutlineRegular, { size: 14 }),
         onSelect: () => {
-          setMenuOpen(false)
-          void requestExport(sessionId, format).then((result) => {
-            if (result.ok) {
-              saveText(result.content, result.filename, result.mediaType)
-              notify(t('toast.exported'), true)
-              return
-            }
-            notify(t(result.code === 'missing' ? 'toast.missing' : 'toast.exportFailed'), false)
-          })
+          submenu = { sessionId, rect: submenuRect, t }
+          publish()
         },
-      }, t(labelKey))
+      }, t('menu.export'))
     }
 
-    /** Menu row (order 450): the Session's stored events as JSON. */
-    const ExportJsonMenuItem = (props) => React.createElement(ExportMenuItem, {
-      ...props, format: 'json', labelKey: 'menu.exportJson',
-    })
-
-    /** Menu row (order 460): the same events rendered as Markdown. */
-    const ExportMarkdownMenuItem = (props) => React.createElement(ExportMenuItem, {
-      ...props, format: 'markdown', labelKey: 'menu.exportMarkdown',
-    })
+    /** `shell.overlay` entry: the Export submenu, anchored under the row that opened it. */
+    function ExportSubmenu() {
+      const current = useSubmenu()
+      if (current === null) return null
+      const close = () => {
+        submenu = null
+        publish()
+      }
+      return React.createElement(Menu, {
+        open: true,
+        portal: true,
+        anchor: null,
+        getAnchorRect: () => current.rect,
+        align: 'start',
+        side: 'right',
+        compact: true,
+        autoFocus: true,
+        items: [
+          { id: 'markdown', label: current.t('menu.exportMarkdown') },
+          { id: 'json', label: current.t('menu.exportJson') },
+        ],
+        onSelect: (id) => {
+          const { sessionId, t } = current
+          close()
+          exportNow(sessionId, id === 'json' ? 'json' : 'markdown', t)
+        },
+        onClose: close,
+      })
+    }
 
     /** Menu row (order 500): the destructive action that raises the confirmation. */
     function DeleteSessionMenuItem({ sessionId, displayTitle, useMenuOpenState, t }) {
@@ -291,11 +346,16 @@ window.__ModuleLoader__.load({
           trigger.click()
         }
         document.addEventListener('contextmenu', openMenu)
-        return () => { document.removeEventListener('contextmenu', openMenu) }
+        document.addEventListener('pointerdown', rememberRow, true)
+        return () => {
+          document.removeEventListener('contextmenu', openMenu)
+          document.removeEventListener('pointerdown', rememberRow, true)
+        }
       }, 'dsh-session-menu-plus: right-click')
 
       ctx.slots.inject('shell.overlay', () => [
         ctx.slots.register({ name: 'shell.overlay', id: 'session-menu-plus-dialog', order: 100, locale: NS }, DeleteSessionDialog),
+        ctx.slots.register({ name: 'shell.overlay', id: 'session-menu-plus-submenu', order: 105 }, ExportSubmenu),
         ctx.slots.register({ name: 'shell.overlay', id: 'session-menu-plus-notice', order: 110 }, SessionMenuNotice),
       ])
 
@@ -304,14 +364,7 @@ window.__ModuleLoader__.load({
         id: 'session-menu-plus.export',
         order: 460,
         locale: NS,
-      }, ExportJsonMenuItem))
-
-      ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
-        name: 'sidebar.workspaces.session.menu.item',
-        id: 'session-menu-plus.export-markdown',
-        order: 470,
-        locale: NS,
-      }, ExportMarkdownMenuItem))
+      }, ExportMenuItem))
 
       ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
         name: 'sidebar.workspaces.session.menu.item',
