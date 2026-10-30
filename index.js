@@ -14,6 +14,7 @@
 import { createHash } from 'node:crypto'
 import { readdir, rm } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
+import { registerFsRoutes } from './fs-ops.js'
 
 /** Route the Client's confirmation calls. */
 const DELETE_ROUTE = '/session-menu-plus/delete'
@@ -440,5 +441,6 @@ export function apply(ctx) {
   ctx.inject(['webServer', 'connection'], (hostCtx) => {
     mount(hostCtx, DELETE_ROUTE, (host, sessionId) => deleteSession(host, sessionId))
     mount(hostCtx, EXPORT_ROUTE, exportSession)
+    registerFsRoutes(hostCtx, { readHeader, readLog })
   })
 }
