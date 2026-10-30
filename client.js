@@ -39,8 +39,6 @@ window.__ModuleLoader__.load({
       'toast.deleteFailed': '删除失败，请稍后重试',
       'toast.missing': '该会话已不存在',
       'toast.running': '该会话正在运行，等它结束后再删',
-      'toast.markedRead': '已标记为已读',
-      'toast.markedUnread': '已标记为未读',
       'unread.mark': '未读',
     }
 
@@ -61,8 +59,6 @@ window.__ModuleLoader__.load({
       'toast.deleteFailed': 'Could not delete the session. Try again',
       'toast.missing': 'That session no longer exists',
       'toast.running': 'That session is running. Delete it once it settles',
-      'toast.markedRead': 'Marked as read',
-      'toast.markedUnread': 'Marked as unread',
       'unread.mark': 'Unread',
     }
 
@@ -247,7 +243,6 @@ window.__ModuleLoader__.load({
           if (isUnread) next.delete(sessionId)
           else next.add(sessionId)
           writeUnread(next)
-          notify(t(isUnread ? 'toast.markedRead' : 'toast.markedUnread'), true)
         },
       }, t(isUnread ? 'menu.markRead' : 'menu.markUnread'))
     }
