@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-menu-plus",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "private": true,
   "description": "Opens the Session menu on right-click and adds a confirmed Session deletion with a notice.",
   "type": "module",

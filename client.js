@@ -26,6 +26,7 @@ window.__ModuleLoader__.load({
       'menu.exportMarkdown': '导出为 Markdown',
       'menu.deleteSession': '删除会话',
       'delete.confirm.title': '删除此会话？',
+      'session.untitled': '未命名',
       'delete.confirm.desc': '“{title}”的会话记录将从本机永久删除，无法恢复。',
       'delete.confirm.action': '删除会话',
       'delete.confirm.pending': '正在删除会话…',
@@ -42,6 +43,7 @@ window.__ModuleLoader__.load({
       'menu.exportMarkdown': 'Export as Markdown',
       'menu.deleteSession': 'Delete session',
       'delete.confirm.title': 'Delete this session?',
+      'session.untitled': 'Untitled',
       'delete.confirm.desc': '“{title}” will be deleted from this device permanently. This cannot be undone.',
       'delete.confirm.action': 'Delete session',
       'delete.confirm.pending': 'Deleting session…',
@@ -55,7 +57,7 @@ window.__ModuleLoader__.load({
 
     /** Row styling the shared primitives do not carry: the destructive confirm label and its pending line. */
     const styles = `
-.smp-danger:not(:disabled){color:var(--dsw-alias-state-error-primary)}
+.smp-danger:not(:disabled){border-color:var(--dsw-alias-state-error-primary);color:var(--dsw-alias-state-error-primary)}
 .smp-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
 `
 
