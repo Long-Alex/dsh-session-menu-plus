@@ -9,7 +9,7 @@
 - 结果以 Toast 反馈：成功 `Session deleted`；失败按「正在运行 / 会话不存在 / 删除失败」提示。
 - 唯一的拒绝条件是「该会话正在跑任务」；当前打开的那行也能删。
 - 删除是彻底的：转录目录、投影缓存、spill、工作区成员、归档标记、注册表内存索引一起清掉，再发 `api-session/removed` 让客户端立即撤行。
-- 菜单还提供 `Export as JSON`（下载图标）：把该会话的完整事件流下载成 `session-<uuid>.json`，成功 `Session exported`。
+- 菜单还提供两项导出（下载图标，紧挨在 `Copy Session ID` 之后）：`Export as JSON` → `session-<uuid>.json`，`Export as Markdown` → `session-<uuid>.md`，成功 `Session exported`。
 
 ## 安装
 
@@ -21,7 +21,11 @@ dsh plugin add /path/to/dsh-session-menu-plus   # 或在 Harness 里用插件管
 
 ## 导出格式
 
-导出文件是「原样事件流」，不重排、不摘要，可逐条回放：
+两种格式来自同一次读取，内容同源。
+
+### JSON：原样事件流
+
+不重排、不摘要，可逐条回放：
 
 ```json
 {
@@ -33,8 +37,57 @@ dsh plugin add /path/to/dsh-session-menu-plus   # 或在 Harness 里用插件管
 ```
 
 - `session` 是该会话不可变的 header，`events` 是按 `seq` 排好序的全部已提交事件（含 `tool/call`、`tool/result`、`step/*`、`turn/*`、`session/title` 等）。
+### Markdown：给人读的转录
+
+```markdown
+# <会话标题>
+
+- Session: `session-…`
+- Working directory: `/Users/alex.long`
+- Started: 2026-10-30T10:48:47.004Z
+- Agent preset: `cordis`
+- Exported: 2026-10-30T13:12:11.071Z
+
+---
+
+## Turn 1 · 2026-10-30T11:57:25.012Z
+
+**User**
+
+…
+
+**Assistant**
+
+…
+
+**Tool · `bash`**
+
+<details><summary>Arguments</summary>
+
+```json
+{"command":"ls"}
+```
+
+</details>
+
+<details><summary>Result</summary>
+
+```text
+…
+```
+
+</details>
+```
+
+- 按 `turn/start` 分节；用户与助手正文取 `text` 块（`reasoning` 与 `tool-call` 块跳过，工具调用改从 `tool/call` / `tool/result` 成对渲染，参数与结果放在可折叠块里）。
+- 单段参数或结果超过 4000 字符会截断并标注省略了多少字符；只有调用没有结果的，会写明 `No result was recorded.`。
+- 代码块围栏会自动避开内容里自带的 ```，不会被内容提前闭合。
+
+### 两种格式共同的前提
+
 - 导出前会先 `sessions.flush(实时实例)`，所以正在跑的会话导出的也是「到此刻为止已落盘」的完整内容。
 - 读取走 `sessionPersistence.open(id, 'read')`，与后端存储完全一致；不读投影缓存。
+- JSON 用 `JSON.stringify(…, null, 2)`，Markdown 是纯文本，浏览器各自按 `application/json` / `text/markdown` 保存。
 
 ## 实现要点
 

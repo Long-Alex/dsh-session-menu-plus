@@ -47,7 +47,14 @@ async function mount() {
         if (id !== SESSION) throw new Error('no such Session')
         return {
           header: { id, cwd: '/tmp', version: 4, createdAt: 1, isSeeded: false },
-          read: async () => ({ events: [{ type: 'session', seq: 0 }, { type: 'user/message', seq: 1 }] }),
+          read: async () => ({ events: [
+            { type: 'session', seq: 0 },
+            { type: 'turn/start', seq: 1, time: 1, data: { turn: 1 } },
+            { type: 'user/message', seq: 2, data: { content: [{ type: 'text', text: 'Fix the build' }] } },
+            { type: 'assistant/message', seq: 3, data: { message: { content: [{ type: 'text', text: 'Looking now.' }] } } },
+            { type: 'tool/call', seq: 4, data: { callId: 'c1', name: 'bash', arguments: '{"command":"ls"}' } },
+            { type: 'tool/result', seq: 5, data: { toolCallId: 'c1', message: { content: [{ type: 'text', text: 'ok' }] } } },
+          ] }),
           close: async () => {},
         }
       },
@@ -162,13 +169,37 @@ test('exports one stored Session as a JSON document', async () => {
   const { status, value } = await call(exportRoute, JSON.stringify({ sessionId: SESSION }))
   assert.equal(status, 200)
   assert.equal(value.ok, true)
-  assert.equal(value.document.format, 'dsh-session-export/1')
-  assert.equal(value.document.session.id, SESSION)
-  assert.deepEqual(value.document.events, [
-    { type: 'session', seq: 0 },
-    { type: 'user/message', seq: 1 },
+  assert.equal(value.format, 'json')
+  assert.equal(value.mediaType, 'application/json')
+  assert.equal(value.filename, `${SESSION}.json`)
+  const document = JSON.parse(value.content)
+  assert.equal(document.format, 'dsh-session-export/1')
+  assert.equal(document.session.id, SESSION)
+  assert.deepEqual(document.events.map((event) => event.type), [
+    'session', 'turn/start', 'user/message', 'assistant/message', 'tool/call', 'tool/result',
   ])
-  assert.match(value.document.exportedAt, /^\d{4}-\d{2}-\d{2}T/)
+  assert.match(document.exportedAt, /^\d{4}-\d{2}-\d{2}T/)
+})
+
+test('renders one stored Session as Markdown turns and tool calls', async () => {
+  const { exportRoute } = await mount()
+  const body = JSON.stringify({ sessionId: SESSION, format: 'markdown' })
+  const { status, value } = await call(exportRoute, body)
+  assert.equal(status, 200)
+  assert.equal(value.format, 'markdown')
+  assert.equal(value.mediaType, 'text/markdown')
+  assert.equal(value.filename, `${SESSION}.md`)
+  assert.match(value.content, /^# /)
+  assert.match(value.content, /\*\*User\*\*/)
+  assert.match(value.content, /\*\*Assistant\*\*/)
+  assert.match(value.content, /\*\*Tool · `bash`\*\*/)
+  assert.match(value.content, /<details><summary>Result<\/summary>/)
+})
+
+test('refuses an export format it does not render', async () => {
+  const { exportRoute } = await mount()
+  const body = JSON.stringify({ sessionId: SESSION, format: 'pdf' })
+  assert.deepEqual(await call(exportRoute, body), { status: 400, value: { ok: false, code: 'invalid' } })
 })
 
 test('reports a Session the backend cannot read', async () => {

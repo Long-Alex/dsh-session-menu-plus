@@ -24,6 +24,7 @@ window.__ModuleLoader__.load({
     /** Simplified Chinese dictionary. */
     const zh = {
       'menu.exportJson': '导出为 JSON',
+      'menu.exportMarkdown': '导出为 Markdown',
       'menu.deleteSession': '删除会话',
       'delete.confirm.title': '删除此会话？',
       'delete.confirm.desc': '“{title}”的会话记录将从本机永久删除，无法恢复。',
@@ -40,6 +41,7 @@ window.__ModuleLoader__.load({
     /** English dictionary. */
     const en = {
       'menu.exportJson': 'Export as JSON',
+      'menu.exportMarkdown': 'Export as Markdown',
       'menu.deleteSession': 'Delete session',
       'delete.confirm.title': 'Delete this session?',
       'delete.confirm.desc': '“{title}” will be deleted from this device permanently. This cannot be undone.',
@@ -104,16 +106,17 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Ask the Host for one Session's JSON export.
+     * Ask the Host for one Session's export in the requested format.
      * @param sessionId - stored Session identity.
-     * @returns the export document, or a failed outcome when the route did not answer.
+     * @param format - `json` or `markdown`.
+     * @returns the payload, or a failed outcome when the route did not answer.
      */
-    async function requestExport(sessionId) {
+    async function requestExport(sessionId, format) {
       try {
         const response = await fetch('/session-menu-plus/export', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ sessionId }),
+          body: JSON.stringify({ sessionId, format }),
         })
         return await response.json()
       } catch {
@@ -122,14 +125,13 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Hand one document to the browser as a download; the browser owns the destination.
-     * @param document - JSON-serializable export document.
+     * Hand one text payload to the browser as a download; the browser owns the destination.
+     * @param content - file text.
      * @param filename - name the browser suggests.
+     * @param mediaType - media type the browser records.
      */
-    function saveJson(document, filename) {
-      const url = URL.createObjectURL(new Blob([JSON.stringify(document, null, 2)], {
-        type: 'application/json',
-      }))
+    function saveText(content, filename, mediaType) {
+      const url = URL.createObjectURL(new Blob([content], { type: `${mediaType};charset=utf-8` }))
       const anchor = window.document.createElement('a')
       anchor.href = url
       anchor.download = filename
@@ -138,24 +140,37 @@ window.__ModuleLoader__.load({
       URL.revokeObjectURL(url)
     }
 
-    /** Menu row (order 450): hand this Session's whole log to the browser as JSON. */
-    function ExportJsonMenuItem({ sessionId, useMenuOpenState, t }) {
+    /**
+     * One download row: asks the Host for `format` and saves what comes back.
+     * @param props - slot owner props plus the row's own `format` and label key.
+     */
+    function ExportMenuItem({ sessionId, useMenuOpenState, format, labelKey, t }) {
       const [, setMenuOpen] = useMenuOpenState()
       return React.createElement(MenuItemButton, {
         icon: React.createElement(IconDownloadOutlineRegular, { size: 14 }),
         onSelect: () => {
           setMenuOpen(false)
-          void requestExport(sessionId).then((result) => {
+          void requestExport(sessionId, format).then((result) => {
             if (result.ok) {
-              saveJson(result.document, `${sessionId}.json`)
+              saveText(result.content, result.filename, result.mediaType)
               notify(t('toast.exported'), true)
               return
             }
             notify(t(result.code === 'missing' ? 'toast.missing' : 'toast.exportFailed'), false)
           })
         },
-      }, t('menu.exportJson'))
+      }, t(labelKey))
     }
+
+    /** Menu row (order 450): the Session's stored events as JSON. */
+    const ExportJsonMenuItem = (props) => React.createElement(ExportMenuItem, {
+      ...props, format: 'json', labelKey: 'menu.exportJson',
+    })
+
+    /** Menu row (order 460): the same events rendered as Markdown. */
+    const ExportMarkdownMenuItem = (props) => React.createElement(ExportMenuItem, {
+      ...props, format: 'markdown', labelKey: 'menu.exportMarkdown',
+    })
 
     /** Menu row (order 500): the destructive action that raises the confirmation. */
     function DeleteSessionMenuItem({ sessionId, displayTitle, useMenuOpenState, t }) {
@@ -287,9 +302,16 @@ window.__ModuleLoader__.load({
       ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
         name: 'sidebar.workspaces.session.menu.item',
         id: 'session-menu-plus.export',
-        order: 450,
+        order: 460,
         locale: NS,
       }, ExportJsonMenuItem))
+
+      ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
+        name: 'sidebar.workspaces.session.menu.item',
+        id: 'session-menu-plus.export-markdown',
+        order: 470,
+        locale: NS,
+      }, ExportMarkdownMenuItem))
 
       ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
         name: 'sidebar.workspaces.session.menu.item',

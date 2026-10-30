@@ -24,6 +24,15 @@ const EXPORT_ROUTE = '/session-menu-plus/export'
 /** The export document's own format tag, so a reader knows what it is holding. */
 const EXPORT_FORMAT = 'dsh-session-export/1'
 
+/** Per-format media type and extension; the browser needs both to offer a save. */
+const EXPORT_FORMATS = {
+  json: { mediaType: 'application/json', extension: 'json' },
+  markdown: { mediaType: 'text/markdown', extension: 'md' },
+}
+
+/** How much of one tool argument or result an export keeps before eliding it. */
+const EXPORT_CLIP = 4000
+
 /** A stored Session identity; anything else never reaches the host services. */
 const SESSION_ID = /^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -191,14 +200,128 @@ async function readLog(ctx, sessionId) {
 }
 
 /**
- * Build the export document for one Session: its header, its complete event
- * stream, and the moment it was read. Events are the stored ones, untouched, so
- * the file replays exactly as the Session ran.
+ * Shorten one long value for a Markdown export.
+ * @param value - raw text.
+ * @returns the text, or its head plus how much was elided.
+ */
+function clip(value) {
+  const text = String(value ?? '')
+  if (text.length <= EXPORT_CLIP) return text
+  return `${text.slice(0, EXPORT_CLIP)}\n… ${text.length - EXPORT_CLIP} more characters`
+}
+
+/**
+ * Fence one block so its own backticks cannot end the fence early.
+ * @param value - raw text.
+ * @param language - fence info string.
+ * @returns a fenced code block.
+ */
+function fence(value, language) {
+  const text = clip(value)
+  const hasFence = /`{3,}/.test(text)
+  const marker = hasFence ? '~~~~' : '```'
+  return `${marker}${language}\n${text}\n${marker}`
+}
+
+/**
+ * Join one message's text parts, ignoring reasoning and tool-call blocks: tool
+ * calls are read from their own events so arguments and results stay paired.
+ * @param content - message content blocks.
+ * @returns the text, or an empty string.
+ */
+function messageText(content) {
+  if (Array.isArray(content) === false) return ''
+  return content
+    .filter((block) => block?.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text.trim())
+    .filter((text) => text.length > 0)
+    .join('\n\n')
+}
+
+/**
+ * Render one Session's event stream as Markdown: a header, then each turn's user
+ * text, assistant text, and every tool call with its arguments and result.
+ * @param header - the Session's immutable header.
+ * @param events - committed events in seq order.
+ * @param exportedAt - export timestamp for the header line.
+ * @returns the Markdown document.
+ */
+export function renderMarkdown(header, events, exportedAt) {
+  let title
+  const turns = []
+  const calls = new Map()
+  for (const event of events) {
+    const data = event?.data ?? {}
+    if (event?.type === 'session/title' && typeof data.title === 'string' && data.title.length > 0) {
+      title = data.title
+      continue
+    }
+    if (event?.type === 'turn/start') {
+      turns.push({ turn: data.turn ?? turns.length + 1, time: event.time, blocks: [] })
+      continue
+    }
+    const turn = turns[turns.length - 1]
+    if (turn === undefined) continue
+    if (event.type === 'user/message') {
+      const text = messageText(data.content)
+      if (text.length > 0) turn.blocks.push(`**User**\n\n${text}`)
+    } else if (event.type === 'assistant/message') {
+      const text = messageText(data.message?.content)
+      if (text.length > 0) turn.blocks.push(`**Assistant**\n\n${text}`)
+    } else if (event.type === 'tool/call') {
+      calls.set(data.callId, { name: data.name, arguments: data.arguments, turn })
+    } else if (event.type === 'tool/result') {
+      const callId = data.toolCallId ?? data.message?.toolCallId
+      const call = calls.get(callId)
+      const result = messageText(data.message?.content)
+      calls.delete(callId)
+      const target = call?.turn ?? turn
+      const parts = [`**Tool · \`${call?.name ?? 'unknown'}\`**`]
+      if (typeof call?.arguments === 'string' && call.arguments.length > 0) {
+        parts.push(`<details><summary>Arguments</summary>\n\n${fence(call.arguments, 'json')}\n\n</details>`)
+      }
+      parts.push(`<details><summary>Result</summary>\n\n${fence(result, 'text')}\n\n</details>`)
+      target.blocks.push(parts.join('\n\n'))
+    }
+  }
+
+  // A call whose result never arrived still belongs in the transcript.
+  for (const [, call] of calls) {
+    const parts = [`**Tool · \`${call.name ?? 'unknown'}\`**`]
+    if (typeof call.arguments === 'string' && call.arguments.length > 0) {
+      parts.push(`<details><summary>Arguments</summary>\n\n${fence(call.arguments, 'json')}\n\n</details>`)
+    }
+    parts.push('_No result was recorded._')
+    call.turn.blocks.push(parts.join('\n\n'))
+  }
+
+  const lines = [
+    `# ${title ?? header.id}`,
+    '',
+    `- Session: \`${header.id}\``,
+    ...(typeof header.cwd === 'string' ? [`- Working directory: \`${header.cwd}\``] : []),
+    ...(typeof header.createdAt === 'number' ? [`- Started: ${new Date(header.createdAt).toISOString()}`] : []),
+    ...(typeof header.agentPreset === 'string' ? [`- Agent preset: \`${header.agentPreset}\``] : []),
+    `- Exported: ${exportedAt}`,
+  ]
+  for (const turn of turns) {
+    if (turn.blocks.length === 0) continue
+    const when = typeof turn.time === 'number' ? ` · ${new Date(turn.time).toISOString()}` : ''
+    lines.push('', '---', '', `## Turn ${turn.turn}${when}`, '', turn.blocks.join('\n\n'))
+  }
+  return `${lines.join('\n').trimEnd()}\n`
+}
+
+/**
+ * Build the export payload for one Session in the requested format. JSON keeps
+ * the stored events untouched so the file replays exactly as the Session ran;
+ * Markdown renders those same events for reading.
  * @param ctx - Host context.
  * @param sessionId - Session to export.
+ * @param format - `json` or `markdown`.
  * @returns the outcome the Client turns into a download.
  */
-async function exportSession(ctx, sessionId) {
+async function exportSession(ctx, sessionId, format) {
   const sessions = service(ctx, 'sessions')
   const live = sessions?.get?.(sessionId)
   if (live !== undefined) {
@@ -210,15 +333,18 @@ async function exportSession(ctx, sessionId) {
   }
   const log = await readLog(ctx, sessionId)
   if (log?.header === undefined) return { ok: false, code: 'missing' }
-  return {
-    ok: true,
-    document: {
+
+  const exportedAt = new Date().toISOString()
+  const { mediaType, extension } = EXPORT_FORMATS[format]
+  const content = format === 'markdown'
+    ? renderMarkdown(log.header, log.events, exportedAt)
+    : JSON.stringify({
       format: EXPORT_FORMAT,
-      exportedAt: new Date().toISOString(),
+      exportedAt,
       session: log.header,
       events: log.events,
-    },
-  }
+    }, null, 2)
+  return { ok: true, format, mediaType, filename: `${sessionId}.${extension}`, content }
 }
 
 /**
@@ -318,7 +444,12 @@ export function apply(ctx) {
             respond(response, 400, { ok: false, code: 'invalid' })
             return
           }
-          respond(response, 200, await handle(hostCtx, sessionId))
+          const format = body?.format ?? 'json'
+          if (Object.hasOwn(EXPORT_FORMATS, format) === false) {
+            respond(response, 400, { ok: false, code: 'invalid' })
+            return
+          }
+          respond(response, 200, await handle(hostCtx, sessionId, format))
         } catch (error) {
           hostCtx.logger?.warn?.(`session-menu-plus: ${path} failed: ${String(error)}`)
           respond(response, 500, { ok: false, code: 'failed' })
@@ -328,7 +459,7 @@ export function apply(ctx) {
   }
 
   ctx.inject(['webServer', 'connection'], (hostCtx) => {
-    mount(hostCtx, DELETE_ROUTE, deleteSession)
+    mount(hostCtx, DELETE_ROUTE, (host, sessionId) => deleteSession(host, sessionId))
     mount(hostCtx, EXPORT_ROUTE, exportSession)
   })
 }
