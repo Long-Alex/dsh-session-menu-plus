@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-menu-plus",
-  "version": "1.5.6",
+  "version": "1.5.7",
   "description": "DeepSeek Harness plugin: right-click the sidebar Session menu, export a Session as Markdown, and delete one with confirmation",
   "keywords": [
     "dsh",
