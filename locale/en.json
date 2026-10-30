@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Session Menu Plus",
-    "description": "Right-click the Session menu, export a Session as Markdown, and delete one with confirmation."
+    "description": "Adds right-click opening and extra Session actions to the sidebar Session menu."
   }
 }
