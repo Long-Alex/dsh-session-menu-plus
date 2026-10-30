@@ -144,7 +144,9 @@ window.__ModuleLoader__.load({
      */
     function exportNow(sessionId, t) {
       void requestExport(sessionId).then((result) => {
-        if (result.ok) {
+        // A Host that predates this build answers with another format; never
+        // hand the user a file that is not the Markdown they asked for.
+        if (result.ok && result.mediaType === 'text/markdown') {
           saveText(result.content, result.filename, result.mediaType)
           notify(t('toast.exported'), true)
           return
