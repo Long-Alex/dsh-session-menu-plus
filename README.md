@@ -9,7 +9,7 @@
 - 结果以 Toast 反馈：成功 `Session deleted`；失败按「正在运行 / 会话不存在 / 删除失败」提示。
 - 唯一的拒绝条件是「该会话正在跑任务」；当前打开的那行也能删。
 - 删除是彻底的：转录目录、投影缓存、spill、工作区成员、归档标记、注册表内存索引一起清掉，再发 `api-session/removed` 让客户端立即撤行。
-- 菜单里有一行 `Export`（下载图标，在 `Copy Session ID` 之后），点开是二级菜单：`Export as Markdown` → `session-<uuid>.md`，`Export as JSON` → `session-<uuid>.json`，成功 `Session exported`。
+- 菜单里有一行 `Export`（下载图标，在 `Copy Session ID` 之后），点它会就地展开两项：`Export as Markdown` → `session-<uuid>.md`，`Export as JSON` → `session-<uuid>.json`，再点一次收起，成功 `Session exported`。
 
 ## 安装
 
@@ -91,7 +91,7 @@ dsh plugin add /path/to/dsh-session-menu-plus   # 或在 Harness 里用插件管
 
 ## 实现要点
 
-- **二级菜单（客户端）**：`Export` 行本身是内置 `MenuItemButton`；点开后在 `shell.overlay` 里用内置 `Menu`（`portal` + `getAnchorRect` + `side: 'right'`）贴在那一行的右侧，条目是 `Menu` 的 data 条目，所以高亮、键盘走位、外部点击关闭都是内置行为。当前运行的 Harness 版本的共享菜单没有内置 submenu 属性，因此这里用同一个 `Menu` 原语自绘一层，而不是自造弹窗。
+- **导出的展开行（客户端）**：`Export` 与它展开的两个格式行都是内置 `MenuItemButton`，三者是同一个菜单里的兄弟行，不另开弹层。这是被平台约束逼出来的正确做法：会话菜单用 `closeOnPointerLeave` 打开，并裁切溢出，所以任何“浮在旁边的子卡片”都会在指针移入时把父菜单带走（portal 卡片）或被菜单容器裁掉（内联绝对定位）。展开行放在同一张菜单里，就只有一个指针目标、一套键盘走位，不会被裁，也不会互相关闭。
 - **菜单行（客户端）**：`sidebar.workspaces.session.menu.item` 注入一行 `MenuItemButton`（危险色＋垃圾桶＋分隔线），点了先弹 `Modal` 确认，确认后 `POST /session-menu-plus/delete`；失败/成功都用共享 `Toast` 反馈。不写自定义弹窗、不改内置组件。
 - **右键**：`contextmenu` 手势导向该行自己的「⋯」触发按钮，菜单、焦点、外部点击关闭、快捷键全部沿用内置实现。
 - **宿主（删除步骤：全部走宿主自己的服务，不自己扫目录）**：
