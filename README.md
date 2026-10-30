@@ -9,7 +9,7 @@
 - 结果以 Toast 反馈：成功 `Session deleted`；失败按「正在运行 / 会话不存在 / 删除失败」提示。
 - 唯一的拒绝条件是「该会话正在跑任务」；当前打开的那行也能删。
 - 删除是彻底的：转录目录、投影缓存、spill、工作区成员、归档标记、注册表内存索引一起清掉，再发 `api-session/removed` 让客户端立即撤行。
-- 菜单里有一行 `Export`（下载图标，在 `Copy Session ID` 之后），点它会就地展开两项：`Export as Markdown` → `session-<uuid>.md`，`Export as JSON` → `session-<uuid>.json`，再点一次收起，成功 `Session exported`。
+- 菜单里有一行 `Export as Markdown`（下载图标，在 `Copy Session ID` 之后），点它下载 `session-<uuid>.md`，成功 `Session exported`。
 
 ## 安装
 
@@ -21,77 +21,25 @@ dsh plugin add /path/to/dsh-session-menu-plus   # 或在 Harness 里用插件管
 
 ## 导出格式
 
-两种格式来自同一次读取，内容同源。
+一行 `Export as Markdown`，导出的是一份可直接阅读的转录。
 
-### JSON：原样事件流
-
-不重排、不摘要，可逐条回放：
-
-```json
-{
-  "format": "dsh-session-export/1",
-  "exportedAt": "2026-10-30T13:05:00.000Z",
-  "session": { "type": "session", "version": 4, "id": "session-…", "cwd": "…", "agentPreset": "cordis" },
-  "events": [ { "type": "user/message", "seq": 11, "time": 1793361445097, "data": { "…": "…" } } ]
-}
-```
-
-- `session` 是该会话不可变的 header，`events` 是按 `seq` 排好序的全部已提交事件（含 `tool/call`、`tool/result`、`step/*`、`turn/*`、`session/title` 等）。
 ### Markdown：给人读的转录
 
-```markdown
-# <会话标题>
-
-- Session: `session-…`
-- Working directory: `/Users/alex.long`
-- Started: 2026-10-30T10:48:47.004Z
-- Agent preset: `cordis`
-- Exported: 2026-10-30T13:12:11.071Z
-
----
-
-## Turn 1 · 2026-10-30T11:57:25.012Z
-
-**User**
-
-…
-
-**Assistant**
-
-…
-
-**Tool · `bash`**
-
-<details><summary>Arguments</summary>
-
-```json
-{"command":"ls"}
-```
-
-</details>
-
-<details><summary>Result</summary>
-
-```text
-…
-```
-
-</details>
-```
-
-- 按 `turn/start` 分节；用户与助手正文取 `text` 块（`reasoning` 与 `tool-call` 块跳过，工具调用改从 `tool/call` / `tool/result` 成对渲染，参数与结果放在可折叠块里）。
-- 单段参数或结果超过 4000 字符会截断并标注省略了多少字符；只有调用没有结果的，会写明 `No result was recorded.`。
+- 从头信息开始：`# <标题>`、cwd / model / preset 等要点、`---`。
+- 每个 turn 一个 `## Turn N · <时间>` 段落，只收正文文本块：`**User**`、`**Assistant**`。
+- 工具调用与结果成对渲染成 `<details>`，避免长输出淹没正文；参数与结果各自截断到 4000 字符。
+- 没有结果的调用标 `_No result was recorded._`，不会凭空补内容。
 - 代码块围栏会自动避开内容里自带的 ```，不会被内容提前闭合。
 
-### 两种格式共同的前提
+### 前提
 
 - 导出前会先 `sessions.flush(实时实例)`，所以正在跑的会话导出的也是「到此刻为止已落盘」的完整内容。
 - 读取走 `sessionPersistence.open(id, 'read')`，与后端存储完全一致；不读投影缓存。
-- JSON 用 `JSON.stringify(…, null, 2)`，Markdown 是纯文本，浏览器各自按 `application/json` / `text/markdown` 保存。
+- 纯文本按 `text/markdown` 交给浏览器保存。
 
 ## 实现要点
 
-- **导出的展开行（客户端）**：`Export` 与它展开的两个格式行都是内置 `MenuItemButton`，三者是同一个菜单里的兄弟行，不另开弹层。这是被平台约束逼出来的正确做法：会话菜单用 `closeOnPointerLeave` 打开，并裁切溢出，所以任何“浮在旁边的子卡片”都会在指针移入时把父菜单带走（portal 卡片）或被菜单容器裁掉（内联绝对定位）。展开行放在同一张菜单里，就只有一个指针目标、一套键盘走位，不会被裁，也不会互相关闭。
+- **导出这一行（客户端）**：就是一个内置 `MenuItemButton`，点了先关菜单再请求导出。不做子菜单：会话菜单是 `closeOnPointerLeave` 打开的，浮在旁边的子卡片会在指针移入时把父菜单带走，内联的绝对定位卡又会被菜单容器裁掉。
 - **菜单行（客户端）**：`sidebar.workspaces.session.menu.item` 注入一行 `MenuItemButton`（危险色＋垃圾桶＋分隔线），点了先弹 `Modal` 确认，确认后 `POST /session-menu-plus/delete`；失败/成功都用共享 `Toast` 反馈。不写自定义弹窗、不改内置组件。
 - **右键**：`contextmenu` 手势导向该行自己的「⋯」触发按钮，菜单、焦点、外部点击关闭、快捷键全部沿用内置实现。
 - **宿主（删除步骤：全部走宿主自己的服务，不自己扫目录）**：

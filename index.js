@@ -18,17 +18,11 @@ import { basename, dirname, join } from 'node:path'
 /** Route the Client's confirmation calls. */
 const DELETE_ROUTE = '/session-menu-plus/delete'
 
-/** Route the Client's JSON export calls. */
+/** Route the Client's export calls. */
 const EXPORT_ROUTE = '/session-menu-plus/export'
 
-/** The export document's own format tag, so a reader knows what it is holding. */
-const EXPORT_FORMAT = 'dsh-session-export/1'
-
-/** Per-format media type and extension; the browser needs both to offer a save. */
-const EXPORT_FORMATS = {
-  json: { mediaType: 'application/json', extension: 'json' },
-  markdown: { mediaType: 'text/markdown', extension: 'md' },
-}
+/** Media type and extension the browser needs to offer a save. */
+const EXPORT_MEDIA = { mediaType: 'text/markdown', extension: 'md' }
 
 /** How much of one tool argument or result an export keeps before eliding it. */
 const EXPORT_CLIP = 4000
@@ -313,15 +307,13 @@ export function renderMarkdown(header, events, exportedAt) {
 }
 
 /**
- * Build the export payload for one Session in the requested format. JSON keeps
- * the stored events untouched so the file replays exactly as the Session ran;
- * Markdown renders those same events for reading.
+ * Build the Markdown export payload for one Session: the stored events rendered
+ * for reading.
  * @param ctx - Host context.
  * @param sessionId - Session to export.
- * @param format - `json` or `markdown`.
  * @returns the outcome the Client turns into a download.
  */
-async function exportSession(ctx, sessionId, format) {
+async function exportSession(ctx, sessionId) {
   const sessions = service(ctx, 'sessions')
   const live = sessions?.get?.(sessionId)
   if (live !== undefined) {
@@ -334,17 +326,9 @@ async function exportSession(ctx, sessionId, format) {
   const log = await readLog(ctx, sessionId)
   if (log?.header === undefined) return { ok: false, code: 'missing' }
 
-  const exportedAt = new Date().toISOString()
-  const { mediaType, extension } = EXPORT_FORMATS[format]
-  const content = format === 'markdown'
-    ? renderMarkdown(log.header, log.events, exportedAt)
-    : JSON.stringify({
-      format: EXPORT_FORMAT,
-      exportedAt,
-      session: log.header,
-      events: log.events,
-    }, null, 2)
-  return { ok: true, format, mediaType, filename: `${sessionId}.${extension}`, content }
+  const content = renderMarkdown(log.header, log.events, new Date().toISOString())
+  const { mediaType, extension } = EXPORT_MEDIA
+  return { ok: true, mediaType, filename: `${sessionId}.${extension}`, content }
 }
 
 /**
@@ -444,12 +428,7 @@ export function apply(ctx) {
             respond(response, 400, { ok: false, code: 'invalid' })
             return
           }
-          const format = body?.format ?? 'json'
-          if (Object.hasOwn(EXPORT_FORMATS, format) === false) {
-            respond(response, 400, { ok: false, code: 'invalid' })
-            return
-          }
-          respond(response, 200, await handle(hostCtx, sessionId, format))
+          respond(response, 200, await handle(hostCtx, sessionId))
         } catch (error) {
           hostCtx.logger?.warn?.(`session-menu-plus: ${path} failed: ${String(error)}`)
           respond(response, 500, { ok: false, code: 'failed' })

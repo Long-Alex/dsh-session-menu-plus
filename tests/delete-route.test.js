@@ -164,29 +164,11 @@ test('refuses a Session identity that is not one', async () => {
   })
 })
 
-test('exports one stored Session as a JSON document', async () => {
+test('renders one stored Session as Markdown turns and tool calls', async () => {
   const { exportRoute } = await mount()
   const { status, value } = await call(exportRoute, JSON.stringify({ sessionId: SESSION }))
   assert.equal(status, 200)
   assert.equal(value.ok, true)
-  assert.equal(value.format, 'json')
-  assert.equal(value.mediaType, 'application/json')
-  assert.equal(value.filename, `${SESSION}.json`)
-  const document = JSON.parse(value.content)
-  assert.equal(document.format, 'dsh-session-export/1')
-  assert.equal(document.session.id, SESSION)
-  assert.deepEqual(document.events.map((event) => event.type), [
-    'session', 'turn/start', 'user/message', 'assistant/message', 'tool/call', 'tool/result',
-  ])
-  assert.match(document.exportedAt, /^\d{4}-\d{2}-\d{2}T/)
-})
-
-test('renders one stored Session as Markdown turns and tool calls', async () => {
-  const { exportRoute } = await mount()
-  const body = JSON.stringify({ sessionId: SESSION, format: 'markdown' })
-  const { status, value } = await call(exportRoute, body)
-  assert.equal(status, 200)
-  assert.equal(value.format, 'markdown')
   assert.equal(value.mediaType, 'text/markdown')
   assert.equal(value.filename, `${SESSION}.md`)
   assert.match(value.content, /^# /)
@@ -194,12 +176,6 @@ test('renders one stored Session as Markdown turns and tool calls', async () => 
   assert.match(value.content, /\*\*Assistant\*\*/)
   assert.match(value.content, /\*\*Tool · `bash`\*\*/)
   assert.match(value.content, /<details><summary>Result<\/summary>/)
-})
-
-test('refuses an export format it does not render', async () => {
-  const { exportRoute } = await mount()
-  const body = JSON.stringify({ sessionId: SESSION, format: 'pdf' })
-  assert.deepEqual(await call(exportRoute, body), { status: 400, value: { ok: false, code: 'invalid' } })
 })
 
 test('reports a Session the backend cannot read', async () => {

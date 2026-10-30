@@ -23,8 +23,6 @@ window.__ModuleLoader__.load({
 
     /** Simplified Chinese dictionary. */
     const zh = {
-      'menu.export': '导出',
-      'menu.exportJson': '导出为 JSON',
       'menu.exportMarkdown': '导出为 Markdown',
       'menu.deleteSession': '删除会话',
       'delete.confirm.title': '删除此会话？',
@@ -41,8 +39,6 @@ window.__ModuleLoader__.load({
 
     /** English dictionary. */
     const en = {
-      'menu.export': 'Export',
-      'menu.exportJson': 'Export as JSON',
       'menu.exportMarkdown': 'Export as Markdown',
       'menu.deleteSession': 'Delete session',
       'delete.confirm.title': 'Delete this session?',
@@ -108,17 +104,16 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Ask the Host for one Session's export in the requested format.
+     * Ask the Host for one Session's Markdown export.
      * @param sessionId - stored Session identity.
-     * @param format - `json` or `markdown`.
      * @returns the payload, or a failed outcome when the route did not answer.
      */
-    async function requestExport(sessionId, format) {
+    async function requestExport(sessionId) {
       try {
         const response = await fetch('/session-menu-plus/export', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ sessionId, format }),
+          body: JSON.stringify({ sessionId }),
         })
         return await response.json()
       } catch {
@@ -143,13 +138,12 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Ask the Host for one export and save it, reporting through the notice seat.
+     * Ask the Host for the Markdown export and save it, reporting through the notice seat.
      * @param sessionId - Session to export.
-     * @param format - `markdown` or `json`.
      * @param t - localized lookup for this plugin's namespace.
      */
-    function exportNow(sessionId, format, t) {
-      void requestExport(sessionId, format).then((result) => {
+    function exportNow(sessionId, t) {
+      void requestExport(sessionId).then((result) => {
         if (result.ok) {
           saveText(result.content, result.filename, result.mediaType)
           notify(t('toast.exported'), true)
@@ -160,33 +154,18 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Export rows (order 460): one `Export` row that reveals the two formats
-     * directly beneath itself, inside the same popup.
-     *
-     * They stay in the popup instead of a floating submenu card because the
-     * shared popup dismisses itself once the pointer leaves its subtree and
-     * clips overflow — a separate card would either close the parent on hover or
-     * be cropped. Revealed rows keep one menu, one pointer target, one keyboard
-     * walk, and no clipping.
+     * Menu row (order 460): writes this Session out as Markdown.
      * @param props - slot owner props.
      */
     function ExportMenuItem({ sessionId, useMenuOpenState, t }) {
       const [, setMenuOpen] = useMenuOpenState()
-      const [open, setOpen] = React.useState(false)
-      const row = React.createElement(MenuItemButton, {
+      return React.createElement(MenuItemButton, {
         icon: React.createElement(IconDownloadOutlineRegular, { size: 14 }),
-        onSelect: () => { setOpen((value) => !value) },
-      }, t('menu.export'))
-      if (open === false) return row
-      // One action per format; the popup closes the way any row selection does.
-      const pick = (format) => {
-        setMenuOpen(false)
-        exportNow(sessionId, format, t)
-      }
-      return React.createElement(React.Fragment, null,
-        row,
-        React.createElement(MenuItemButton, { onSelect: () => { pick('markdown') } }, t('menu.exportMarkdown')),
-        React.createElement(MenuItemButton, { onSelect: () => { pick('json') } }, t('menu.exportJson')))
+        onSelect: () => {
+          setMenuOpen(false)
+          exportNow(sessionId, t)
+        },
+      }, t('menu.exportMarkdown'))
     }
 
     /** Menu row (order 500): the destructive action that raises the confirmation. */
