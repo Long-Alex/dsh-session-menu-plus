@@ -1,15 +1,19 @@
 {
   "name": "dsh-session-menu-plus",
   "version": "1.4.4",
-  "private": true,
-  "description": "Opens the Session menu on right-click and adds a confirmed Session deletion with a notice.",
+  "description": "DeepSeek Harness plugin: right-click the sidebar Session menu, export a Session as Markdown, and delete one with confirmation",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "cordis-plugin",
+    "harness-plugin",
+    "session",
+    "context-menu",
+    "markdown-export"
+  ],
   "type": "module",
-  "exports": {
-    ".": "./index.js",
-    "./client": "./client.js",
-    "./locale/*.json": "./locale/*.json",
-    "./icon": "./icon.svg"
-  },
   "files": [
     "index.js",
     "client.js",
@@ -30,5 +34,12 @@
         "@deepseek-ai/dsh-client-ui-slots"
       ]
     }
+  },
+  "private": true,
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
   }
 }
