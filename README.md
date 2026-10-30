@@ -58,7 +58,7 @@ Preconditions:
 ## Known limits
 
 - A Session with a running agent is refused; everything else, including the row you have open, is deletable.
-- The read/unread mark is this plugin's own and per Client: it is not the platform's `completionUnread` chip (that one is runtime-only and has no setter) and it does not sync across machines. Opening the Session clears its mark, so only `Mark as unread` ever needs a second gesture.
+- The read/unread mark is this plugin's own and per Client: it is not the platform's `completionUnread` chip (that one is runtime-only and has no setter) and it does not sync across machines. Showing that Session clears its own mark — opening a different one leaves it alone — so only `Mark as unread` ever needs a second gesture.
 - Deleting the open Session leaves the conversation pane on the empty/onboarding state — the transcript directory and projection cache are already gone.
 - Deletion does not prune `sessionIds` / `archivedSessionIds` / `pinnedSessionIds` from `workspace.json`: the platform exposes no removal API for them. A leftover entry is not rendered and has no effect.
 

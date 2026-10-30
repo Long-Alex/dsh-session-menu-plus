@@ -389,22 +389,26 @@ window.__ModuleLoader__.load({
         ctx.slots.register({ name: 'shell.overlay', id: 'session-menu-plus-notice', order: 110 }, SessionMenuNotice),
       ])
 
-      // Opening a Session is reading it: the row that the main view holds keeps
-      // no unread mark, so the manual toggle never has to be undone by hand.
+      // Reading a Session clears *its* mark, and only when that Session becomes
+      // the one the main view holds. The id is resolved the same way the browser
+      // resolves the highlighted row, so the two never disagree.
       ctx.effect(() => {
-        const clearOpen = () => {
-          const open = Object.values(ctx.sessions.list.getSnapshot().byId)
-            .filter(row => (row.retainedBy.mainView ?? 0) > 0)
-          if (open.length === 0) return
-          const next = new Set(unread)
-          let changed = false
-          for (const row of open) if (next.delete(row.id)) changed = true
-          if (changed) writeUnread(next)
+        const shown = () => Object.values(ctx.sessions.list.getSnapshot().byId)
+          .find(row => (row.retainedBy.mainView ?? 0) > 0)?.id
+        let current = shown()
+        const clearSwitch = () => {
+          const next = shown()
+          if (next === undefined || next === current) return
+          current = next
+          if (unread.has(next) === false) return
+          const marked = new Set(unread)
+          marked.delete(next)
+          writeUnread(marked)
         }
-        const stop = ctx.sessions.list.subscribe(clearOpen)
-        clearOpen()
+        const stop = ctx.sessions.list.subscribe(clearSwitch)
+        clearSwitch()
         return stop
-      }, 'session-menu-plus: opening a Session clears its mark')
+      }, 'session-menu-plus: showing a Session clears its mark')
 
       ctx.slots.inject('sidebar.session.row.leading', () => ctx.slots.register({
         name: 'sidebar.session.row.leading',
