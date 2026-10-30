@@ -15,7 +15,8 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const {
-      Button, IconDownloadOutlineRegular, IconTrashOutlineRegular, MenuItemButton, Modal, Toast,
+      Button, IconCheckCircleFillRegular, IconCheckCircleOutlineRegular, IconDownloadOutlineRegular,
+      IconTrashOutlineRegular, MenuItemButton, Modal, Toast,
     } = require('@deepseek-ai/dsh-client-ui-primitives')
 
     /** Dictionary namespace owned by this plugin. */
@@ -23,6 +24,8 @@ window.__ModuleLoader__.load({
 
     /** Simplified Chinese dictionary. */
     const zh = {
+      'menu.markRead': '标记为已读',
+      'menu.markUnread': '标记为未读',
       'menu.exportMarkdown': '导出为 Markdown',
       'menu.deleteSession': '删除会话',
       'delete.confirm.title': '删除此会话？',
@@ -36,10 +39,15 @@ window.__ModuleLoader__.load({
       'toast.deleteFailed': '删除失败，请稍后重试',
       'toast.missing': '该会话已不存在',
       'toast.running': '该会话正在运行，等它结束后再删',
+      'toast.markedRead': '已标记为已读',
+      'toast.markedUnread': '已标记为未读',
+      'unread.mark': '未读',
     }
 
     /** English dictionary. */
     const en = {
+      'menu.markRead': 'Mark as read',
+      'menu.markUnread': 'Mark as unread',
       'menu.exportMarkdown': 'Export as Markdown',
       'menu.deleteSession': 'Delete session',
       'delete.confirm.title': 'Delete this session?',
@@ -53,6 +61,9 @@ window.__ModuleLoader__.load({
       'toast.deleteFailed': 'Could not delete the session. Try again',
       'toast.missing': 'That session no longer exists',
       'toast.running': 'That session is running. Delete it once it settles',
+      'toast.markedRead': 'Marked as read',
+      'toast.markedUnread': 'Marked as unread',
+      'unread.mark': 'Unread',
     }
 
     /** Row styling the shared primitives do not carry: the destructive confirm label and its pending line,
@@ -60,6 +71,8 @@ window.__ModuleLoader__.load({
     const styles = `
 .smp-danger:not(:disabled){color:var(--dsw-alias-state-error-primary)}
 .smp-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
+.smp-unread{display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px;flex:none}
+.smp-unread::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-business-primary)}
 `
 
     /** The one confirmation awaiting an answer, and the one notice on screen. */
@@ -79,8 +92,51 @@ window.__ModuleLoader__.load({
       return () => { listeners.delete(listener) }
     }
 
+    /** Storage key for the Session ids this Client marks unread. */
+    const UNREAD_KEY = 'dsh-session-menu-plus:unread'
+
+    /**
+     * Read the persisted unread set, ignoring a payload this plugin cannot parse.
+     * @returns the stored ids, or an empty set.
+     */
+    function loadUnread() {
+      try {
+        const raw = window.localStorage.getItem(UNREAD_KEY)
+        if (raw === null) return new Set()
+        const parsed = JSON.parse(raw)
+        return new Set(Array.isArray(parsed) ? parsed.filter(id => typeof id === 'string') : [])
+      } catch {
+        return new Set()
+      }
+    }
+
+    /** Session ids marked unread. Replaced on every write so snapshots stay comparable. */
+    let unread = loadUnread()
+
+    /**
+     * Persist the unread set and publish it to every mounted outlet.
+     * @param next - the set to keep.
+     */
+    function writeUnread(next) {
+      unread = next
+      try {
+        window.localStorage.setItem(UNREAD_KEY, JSON.stringify([...next]))
+      } catch {
+        // A Client whose storage is full or blocked still gets the in-memory mark.
+      }
+      publish()
+    }
+
+    // Another window sharing this storage keeps the same marks.
+    window.addEventListener('storage', (event) => {
+      if (event.key !== UNREAD_KEY) return
+      unread = loadUnread()
+      publish()
+    })
+
     const usePending = () => React.useSyncExternalStore(subscribe, () => pending)
     const useNotice = () => React.useSyncExternalStore(subscribe, () => notice)
+    const useUnread = () => React.useSyncExternalStore(subscribe, () => unread)
 
     /** Show one notice; a new key restarts the banner. */
     function notify(text, success) {
@@ -154,6 +210,47 @@ window.__ModuleLoader__.load({
         }
         notify(t(result.code === 'missing' ? 'toast.missing' : 'toast.exportFailed'), false)
       })
+    }
+
+    /**
+     * Row mark (leading cell): the unread dot for a Session this Client marked unread.
+     *
+     * The row offers this 16px cell to the seat only while its own state is idle,
+     * so the dot never competes with a running or pending status marker.
+     * @param props - slot owner props.
+     */
+    function UnreadMark({ sessionId, t }) {
+      const marked = useUnread()
+      if (marked.has(sessionId) === false) return null
+      return React.createElement('span', {
+        className: 'smp-unread',
+        role: 'img',
+        'aria-label': t('unread.mark'),
+      })
+    }
+
+    /**
+     * Menu row (order 440): flips this Session between read and unread.
+     * @param props - slot owner props.
+     */
+    function MarkUnreadMenuItem({ sessionId, useMenuOpenState, t }) {
+      const [, setMenuOpen] = useMenuOpenState()
+      const marked = useUnread()
+      const isUnread = marked.has(sessionId)
+      return React.createElement(MenuItemButton, {
+        icon: React.createElement(
+          isUnread ? IconCheckCircleOutlineRegular : IconCheckCircleFillRegular,
+          { size: 14 },
+        ),
+        onSelect: () => {
+          setMenuOpen(false)
+          const next = new Set(unread)
+          if (isUnread) next.delete(sessionId)
+          else next.add(sessionId)
+          writeUnread(next)
+          notify(t(isUnread ? 'toast.markedRead' : 'toast.markedUnread'), true)
+        },
+      }, t(isUnread ? 'menu.markRead' : 'menu.markUnread'))
     }
 
     /**
@@ -297,6 +394,20 @@ window.__ModuleLoader__.load({
         ctx.slots.register({ name: 'shell.overlay', id: 'session-menu-plus-dialog', order: 100, locale: NS }, DeleteSessionDialog),
         ctx.slots.register({ name: 'shell.overlay', id: 'session-menu-plus-notice', order: 110 }, SessionMenuNotice),
       ])
+
+      ctx.slots.inject('sidebar.session.row.leading', () => ctx.slots.register({
+        name: 'sidebar.session.row.leading',
+        id: 'session-menu-plus.unread',
+        order: 20,
+        locale: NS,
+      }, UnreadMark))
+
+      ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
+        name: 'sidebar.workspaces.session.menu.item',
+        id: 'session-menu-plus.unread',
+        order: 440,
+        locale: NS,
+      }, MarkUnreadMenuItem))
 
       ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
         name: 'sidebar.workspaces.session.menu.item',
