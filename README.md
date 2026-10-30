@@ -16,10 +16,12 @@ Three additions to the DeepSeek Harness sidebar Session list: **a Session menu o
 ## Install
 
 ```bash
-dsh plugin add /path/to/dsh-session-menu-plus   # or install the directory from the Harness plugin manager
+dsh plugin add dsh-session-menu-plus             # from the npm registry
+dsh plugin add /path/to/dsh-session-menu-plus    # or straight from a checkout
 ```
 
-Restart Harness afterwards — Client modules are loaded as a bundle.
+The Harness plugin manager can also install either one. Restart Harness afterwards — Client modules are
+loaded as a bundle.
 
 ## Export format
 
