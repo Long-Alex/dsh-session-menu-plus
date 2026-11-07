@@ -309,6 +309,27 @@ window.__ModuleLoader__.load({
       }
 
       /**
+       * The workspace-relative spelling of one menu path.
+       *
+       * The sidebar file tree hands a row as an absolute path (`childPath` runs
+       * over the Session's own `cwd`), while a conversation's file link hands the
+       * same row relative to that workspace. Only the copy row needs the relative
+       * spelling, so an absolute path inside the workspace loses its root; a path
+       * that already is relative comes back untouched.
+       * @param sessionId - the Session the row belongs to.
+       * @param path - the row's path, absolute or workspace-relative.
+       * @returns the `/`-joined path below the workspace root.
+       */
+      function relativePathOf(sessionId, path) {
+        const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
+        if (typeof cwd !== 'string' || cwd.length === 0) return path
+        const root = cwd.replace(/[/\\]+$/, '')
+        if (path === root) return ''
+        if (path.startsWith(`${root}/`) || path.startsWith(`${root}\\`)) return path.slice(root.length + 1)
+        return path
+      }
+
+      /**
        * The parent directory of one workspace path; the workspace root for a
        * top-level entry.
        * @param path - workspace-relative file or directory path.
@@ -692,38 +713,38 @@ window.__ModuleLoader__.load({
       // `ui-open-in-app` already offers.
       ctx.effect(() => ctx.contextMenus.register({
         id: 'session-menu-plus.relativePath', target: 'file', order: 610,
-        resolve: ({ path }) => [{
+        resolve: ({ sessionId, path }) => [{
           id: 'copyRelativePath',
           label: t('file.menu.copyRelativePath'),
           icon: { key: 'session-menu-plus.copyRelativePath' },
           separatorBefore: true,
           failureLabel: t('file.error.clipboard'),
-          run: () => copyRelativePath(path),
+          run: () => copyRelativePath(relativePathOf(sessionId, path)),
         }],
       }), 'session-menu-plus: file relative path row')
 
       ctx.effect(() => ctx.contextMenus.register({
         id: 'session-menu-plus.relativePath', target: 'directory', order: 610,
-        resolve: ({ path }) => [{
+        resolve: ({ sessionId, path }) => [{
           id: 'copyRelativePath',
           label: t('file.menu.copyRelativePath'),
           icon: { key: 'session-menu-plus.copyRelativePath' },
           separatorBefore: true,
           failureLabel: t('file.error.clipboard'),
-          run: () => copyRelativePath(path),
+          run: () => copyRelativePath(relativePathOf(sessionId, path)),
         }],
       }), 'session-menu-plus: directory relative path row')
 
       // Order 700: put the file into the composer as an `@` reference.
       ctx.effect(() => ctx.contextMenus.register({
         id: 'session-menu-plus.addToChat', target: 'file', order: 700,
-        resolve: ({ path }) => [{
+        resolve: ({ sessionId, path }) => [{
           id: 'addToChat',
           label: t('file.menu.addToChat'),
           icon: { key: 'session-menu-plus.addToChat' },
           separatorBefore: true,
           failureLabel: t('file.error.mention'),
-          run: () => addToConversation(path),
+          run: () => addToConversation(relativePathOf(sessionId, path)),
         }],
       }), 'session-menu-plus: file add-to-chat row')
 

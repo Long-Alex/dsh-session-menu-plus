@@ -122,6 +122,18 @@ async function there(path) {
   return lstat(path).then(() => true, () => false)
 }
 
+test('creates in the directory an absolute row names', async () => {
+  const { route, workspace } = await mount()
+  assert.deepEqual(await post(route('/session-menu-plus/fs/create'), { path: join(workspace, 'docs'), name: 'b2.txt' }), {
+    status: 200, value: { ok: true, path: 'docs/b2.txt' },
+  })
+  assert.equal(await readFile(join(workspace, 'docs', 'b2.txt'), 'utf8'), '')
+  assert.deepEqual(await post(route('/session-menu-plus/fs/mkdir'), { path: join(workspace, 'docs'), name: 'nested' }), {
+    status: 200, value: { ok: true, path: 'docs/nested' },
+  })
+  assert.equal(await there(join(workspace, 'docs', 'nested')), true)
+})
+
 test('creates one empty file in the directory the menu named', async () => {
   const { route, workspace } = await mount()
   assert.deepEqual(await post(route('/session-menu-plus/fs/create'), { path: '', name: 'draft.md' }), {
@@ -366,6 +378,23 @@ test('opens the Host terminal at the directory the menu named', async () => {
   assert.deepEqual(launched, [expected, expected])
   assert.deepEqual(await post(terminal, { path: 'ghost' }), {
     status: 200, value: { ok: false, code: 'not-found' },
+  })
+  // The sidebar tree keys its rows by `childPath(cwd, name)`, so the same row
+  // arrives absolute; the workspace spelling and the physical one both name it.
+  assert.deepEqual(await post(terminal, { path: join(workspace, 'docs') }), {
+    status: 200, value: { ok: true, path: expected },
+  })
+  assert.deepEqual(await post(terminal, { path: join(workspace, 'docs', 'a.txt') }), {
+    status: 200, value: { ok: true, path: expected },
+  })
+  assert.deepEqual(await post(terminal, { path: '../../etc' }), {
+    status: 200, value: { ok: false, code: 'outside-workspace' },
+  })
+  assert.deepEqual(await post(terminal, { path: join(home, 'outside') }), {
+    status: 200, value: { ok: false, code: 'outside-workspace' },
+  })
+  assert.deepEqual(await post(terminal, { path: join(workspace, 'docs', '..', '..', 'etc') }), {
+    status: 200, value: { ok: false, code: 'outside-workspace' },
   })
 })
 

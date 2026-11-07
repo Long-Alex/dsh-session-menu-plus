@@ -217,25 +217,59 @@ async function workspaceOf(host, readHeader, sessionId) {
 }
 
 /**
- * Split one wire path into segments, refusing anything that is not a plain
- * workspace-relative path.
+ * Split one wire path into segments below the workspace root.
+ *
+ * Both spellings the platform's menus produce are accepted: the file tree hands
+ * a row as an absolute path (`childPath(cwd, name)` in `ui-sidebar-files`), while
+ * a conversation's file link hands the same row relative to the workspace — the
+ * shipped `ui-open-in-app` resolves both with its own `resolveWorkspacePath`.
+ * An absolute path becomes segments only after its physical path proves it stays
+ * inside `root`, so nothing wider is granted than the relative spelling already had.
+ * @param root - the Session's real workspace root.
  * @param value - `path` or `source` as the Client sent it.
  * @returns the segments below the workspace root; empty for the root itself.
  */
-function segmentsOf(value) {
+async function segmentsUnder(root, value) {
   if (typeof value !== 'string') refuse('invalid')
   if (value.includes(NUL)) refuse('outside-workspace')
   const slashed = value.replaceAll('\\', '/')
-  if (slashed.startsWith('/') || /^[a-zA-Z]:/.test(slashed)) refuse('outside-workspace')
-  const parts = slashed.split('/').filter((part) => part.length > 0)
-  if (parts.some((part) => part === '.' || part === '..')) refuse('outside-workspace')
+  if (slashed.startsWith('/') || /^[a-zA-Z]:/.test(slashed)) return absoluteSegments(root, value)
+  const parts = slashed.split('/').filter((part) => part.length > 0 && part !== '.')
+  if (parts.some((part) => part === '..')) refuse('outside-workspace')
   return parts
+}
+
+/**
+ * Turn one absolute path into workspace-relative segments.
+ *
+ * Comparison runs on physical paths, so a root spelled through a symlink (a
+ * `/tmp` workspace on macOS) still matches its `/private/tmp` target. A path
+ * that does not exist yet — a name a create or a rename is about to add — is
+ * judged by its physical parent directory plus that last name.
+ * @param root - the Session's real workspace root.
+ * @param value - the absolute path as the Client sent it.
+ * @returns the segments below the workspace root; empty for the root itself.
+ */
+async function absoluteSegments(root, value) {
+  const target = resolve(value)
+  const real = await realpath(target).catch(() => undefined)
+  if (real !== undefined) {
+    if (real === root) return []
+    if (real.startsWith(root + sep)) return real.slice(root.length + 1).split(sep)
+    refuse('outside-workspace')
+  }
+  const parent = await realpath(dirname(target)).catch(() => undefined)
+  if (parent === undefined) refuse('outside-workspace')
+  const name = basename(target)
+  if (parent === root) return [name]
+  if (parent.startsWith(root + sep)) return [...parent.slice(root.length + 1).split(sep), name]
+  return refuse('outside-workspace')
 }
 
 /**
  * Join validated segments under the workspace root.
  * @param root - the Session's real workspace root.
- * @param parts - segments from {@link segmentsOf}.
+ * @param parts - segments from {@link segmentsUnder}.
  * @returns the absolute target, proven to stay under `root`.
  */
 function joinInside(root, parts) {
@@ -265,7 +299,7 @@ async function realInside(root, target) {
  * @returns the directory's real path.
  */
 async function directoryInside(root, value) {
-  const real = await realInside(root, joinInside(root, segmentsOf(value)))
+  const real = await realInside(root, joinInside(root, await segmentsUnder(root, value)))
   if (real === undefined) refuse('not-found')
   const info = await stat(real).catch(() => undefined)
   if (info?.isDirectory() !== true) refuse('not-found')
@@ -280,7 +314,7 @@ async function directoryInside(root, value) {
  * @returns the absolute entry and its `lstat` facts; the root is never an entry.
  */
 async function entryInside(root, value) {
-  const target = joinInside(root, segmentsOf(value))
+  const target = joinInside(root, await segmentsUnder(root, value))
   if (target === root) refuse('busy')
   const info = await lstat(target).catch(() => undefined)
   if (info === undefined) refuse('not-found')
@@ -521,7 +555,7 @@ async function launchTerminal(directory) {
  */
 async function openTerminal(host, deps, sessionId, body) {
   const root = await workspaceOf(host, deps.readHeader, sessionId)
-  const real = await realInside(root, joinInside(root, segmentsOf(body.path)))
+  const real = await realInside(root, joinInside(root, await segmentsUnder(root, body.path)))
   if (real === undefined) refuse('not-found')
   const info = await stat(real).catch(() => undefined)
   if (info === undefined) refuse('not-found')
@@ -562,7 +596,7 @@ function sameChangesPath(file, relative) {
  */
 async function locateChanges(host, deps, sessionId, body) {
   const root = await workspaceOf(host, deps.readHeader, sessionId)
-  const target = joinInside(root, segmentsOf(body.path))
+  const target = joinInside(root, await segmentsUnder(root, body.path))
   if (target === root) refuse('not-found')
   const relative = workspacePath(root, target)
 
